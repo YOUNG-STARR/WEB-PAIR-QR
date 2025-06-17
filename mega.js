@@ -1,36 +1,44 @@
 const mega = require("megajs");
 
+// ⚠️ Remplace par tes vraies informations MEGA
 const auth = {
-    email: 'your mega email',   //use your real vaild mega account email
-    password: 'mega password',  ////use your real vaild mega account password
-    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/42.0.2311.135 Safari/537.36 Edge/12.246'
+    email: process.env.MEGA_EMAIL || 'your_mega_email@example.com',
+    password: process.env.MEGA_PASSWORD || 'your_mega_password',
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
 };
 
+/**
+ * Upload un fichier (stream) sur MEGA
+ * @param {ReadableStream} data - Le stream du fichier à envoyer
+ * @param {string} name - Le nom du fichier sur MEGA
+ * @returns {Promise<string>} - URL de téléchargement du fichier
+ */
 const upload = (data, name) => {
     return new Promise((resolve, reject) => {
-        try {
-            if (!auth.email || !auth.password || !auth.userAgent) {
-                throw new Error("Missing required authentication fields");
-            }
+        if (!auth.email || !auth.password) {
+            return reject(new Error("❌ Email ou mot de passe MEGA manquant."));
+        }
 
-            console.log("Using auth:", auth); // Debugging line
+        const storage = new mega.Storage(auth, () => {
+            const uploader = storage.upload({ name });
 
-            const storage = new mega.Storage(auth, () => {
-                data.pipe(storage.upload({ name: name, allowUploadBuffering: true }));
-                storage.on("add", (file) => {
-                    file.link((err, url) => {
-                        if (err) {
-                            reject(err);
-                            return;
-                        }
-                        storage.close();
-                        resolve(url);
-                    });
+            data.pipe(uploader);
+
+            uploader.on('complete', (file) => {
+                file.link((err, url) => {
+                    storage.close();
+                    if (err) return reject(err);
+                    return resolve(url);
                 });
             });
-        } catch (err) {
-            reject(err);
-        }
+
+            uploader.on('error', (err) => {
+                storage.close();
+                reject(err);
+            });
+        });
+
+        storage.on('error', reject);
     });
 };
 
